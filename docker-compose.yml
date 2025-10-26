@@ -1,149 +1,220 @@
 version: '3.8'
 
+networks:
+  gog_network:
+    driver: bridge
+
+volumes:
+  minio_data:
+  es_data:
+  db_data:
+  traefik_acme:
+  traefik_logs:
+
 services:
-  minio:
-    image: minio/minio
-    container_name: minio
+  # ============================================
+  # TRAEFIK - Reverse Proxy & SSL
+  # ============================================
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - gog_network
     ports:
-      - "9090:9000"
-      - "9091:9001"
+      - "80:80"
+      - "443:443"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - LETS_ENCRYPT_EMAIL=${LETS_ENCRYPT_EMAIL}
     volumes:
-      - ./minio-data:/data
-    command: server /data --console-address ":9001"
-    restart: always
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - traefik_acme:/acme
+      - traefik_logs:/var/log/traefik
+    labels:
+      - "traefik.enable=true"
+      
+      # Dashboard
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      
+      # Basic Auth for Dashboard
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_USER}:${TRAEFIK_DASHBOARD_PASSWORD}"
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
-    container_name: elasticsearch
-    environment:
-      - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
-      - xpack.security.enabled=false
-      - xpack.security.transport.ssl.enabled=false
-      - xpack.security.http.ssl.enabled=false
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - esdata:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    restart: always
-
-  drupal:
-    build:
-      context: ./drupal-docker
-      dockerfile: Dockerfile
-    container_name: drupal
-    ports:
-      - "8001:80"
-    volumes:
-      - ./drupal-docker/drupal_t:/var/www/html
-    depends_on:
-      - db
-    restart: always
-
-  db:
-    image: mariadb:10.5
-    container_name: drupal_db
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: drupal
-      MYSQL_USER: drupal
-      MYSQL_PASSWORD: drupalpass
-    volumes:
-      - db_data:/var/lib/mysql
-      - ./drupal-docker/db.sql:/docker-entrypoint-initdb.d/db.sql
-    restart: always
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.backend
-    container_name: backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - elasticsearch
-      - minio
-    restart: always
-    env_file:
-      - ./backend/.env
-
+  # ============================================
+  # FRONTEND - React Application
+  # ============================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: frontend
-    ports:
-      - "19000:19000"
-      - "19001:19001"
-      - "19002:19002"
-      - "19006:19006"
-      - "8081:8081"
-    depends_on:
-      - backend
-    restart: always
+    restart: unless-stopped
+    networks:
+      - gog_network
     env_file:
-      - ./frontend/.env
-
-  postgres:
-    image: postgres
-    container_name: postgres
+      - .env
     environment:
-      POSTGRES_PASSWORD: mysecretpassword
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./postgres/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    restart: always
+      - API_BASE_URL=${API_URL}
+      - IMAGE_BASE_URL=${CMS_URL}
+      - MINIO_BASE_URL=${MINIO_URL}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=8081"
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
-    volumes:
-      - ./servers.json:/pgadmin4/servers.json
-    depends_on:
-      - postgres
-    restart: always
-
-  login:
+  # ============================================
+  # BACKEND - FastAPI
+  # ============================================
+  backend:
     build:
-      context: ./backend/login
-      dockerfile: Dockerfile.login
-    container_name: login
-    ports:
-      - "8002:8002"
-    depends_on:
-      - postgres
-    restart: always
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: backend
+    restart: unless-stopped
+    networks:
+      - gog_network
     env_file:
-      - ./backend/login/.env
-  
-  uploader:
-    build:
-      context: .
-      dockerfile: Dockerfile    # explicitly named
-    container_name: minio_uploader
+      - .env
+    environment:
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - MINIO_PUBLIC_URL=${MINIO_URL}
+      - DRUPAL_PUBLIC_URL=${CMS_URL}
+      - FRONTEND_PUBLIC_URL=${FRONTEND_URL}
     depends_on:
+      - elasticsearch
       - minio
+      - drupal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+  # ============================================
+  # DRUPAL - Headless CMS
+  # ============================================
+  drupal:
+    build:
+      context: ./drupal-docker
+      dockerfile: Dockerfile
+    container_name: drupal
+    restart: unless-stopped
+    networks:
+      - gog_network
     volumes:
-      - ./minio-data:/data       # host → /data in container
-    restart: "no"
-volumes:
-  db_data:
-  esdata:
-  pgdata:
+      - ./drupal-docker/drupal_t:/var/www/html
+    depends_on:
+      - db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.drupal.rule=Host(`${CMS_DOMAIN}`)"
+      - "traefik.http.routers.drupal.entrypoints=websecure"
+      - "traefik.http.routers.drupal.tls.certresolver=letsencrypt"
+      - "traefik.http.services.drupal.loadbalancer.server.port=80"
+
+  # ============================================
+  # MARIADB - Drupal Database
+  # ============================================
+  db:
+    image: mariadb:10.5
+    container_name: drupal_db
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./drupal-docker/db.sql:/docker-entrypoint-initdb.d/db.sql
+
+  # ============================================
+  # MINIO - Object Storage
+  # ============================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    labels:
+      - "traefik.enable=true"
+      
+      # MinIO API
+      - "traefik.http.routers.minio-api.rule=Host(`${MINIO_DOMAIN}`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-api.service=minio-api"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+      
+      # MinIO Console
+      - "traefik.http.routers.minio-console.rule=Host(`${MINIO_CONSOLE_DOMAIN}`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+
+  # ============================================
+  # ELASTICSEARCH - Search Engine
+  # ============================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    container_name: elasticsearch
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS}
+      - xpack.security.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - xpack.security.http.ssl.enabled=false
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.elasticsearch.rule=Host(`${SEARCH_DOMAIN}`)"
+      - "traefik.http.routers.elasticsearch.entrypoints=websecure"
+      - "traefik.http.routers.elasticsearch.tls.certresolver=letsencrypt"
+      - "traefik.http.services.elasticsearch.loadbalancer.server.port=9200"
+
+  # ============================================
+  # PGADMIN - PostgreSQL Admin (if needed)
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${CONTACT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`${DB_DOMAIN}`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"

@@ -1,0 +1,36 @@
+# Environment Configuration (local only)
+.env
+.env.backup
+
+# Keep templates (committed)
+!.env.dev
+!.env.pre-prod
+!.env.prod
+
+# Traefik
+acme.json
+traefik/logs/
+
+# Docker volumes
+minio-data/
+postgres-data/
+drupal-data/
+esdata/
+
+# Logs
+*.log
+logs/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/
+.idea/

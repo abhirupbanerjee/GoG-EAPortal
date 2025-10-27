@@ -1,39 +1,3 @@
-# from minio import Minio
-# from minio.error import S3Error
-# from uuid import uuid4
-# import os
-
-# # ✅ Correct MinIO S3 API port
-# MINIO_ENDPOINT = "localhost:9100"
-# MINIO_ACCESS_KEY = "minioadmin"
-# MINIO_SECRET_KEY = "minioadmin"
-# MINIO_BUCKET_NAME = "request-files"
-
-# # ✅ MinIO client using correct S3 API port
-# minio_client = Minio(
-#     MINIO_ENDPOINT,
-#     access_key=MINIO_ACCESS_KEY,
-#     secret_key=MINIO_SECRET_KEY,
-#     secure=False,
-# )
-
-# def upload_file_to_minio(file, file_name):
-#     # Ensure bucket exists
-#     if not minio_client.bucket_exists(MINIO_BUCKET_NAME):
-#         minio_client.make_bucket(MINIO_BUCKET_NAME)
-
-#     # Upload file
-#     minio_client.put_object(
-#         bucket_name=MINIO_BUCKET_NAME,
-#         object_name=file_name,
-#         data=file.file,
-#         length=-1,
-#         part_size=10 * 1024 * 1024,
-#         content_type=file.content_type
-#     )
-    
-#     # Return the path to the file inside the bucket
-#     return f"{MINIO_BUCKET_NAME}/{file_name}"
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from uuid import uuid4
 from minio import Minio
@@ -44,7 +8,7 @@ from models import RequestFile, ServiceRequest  # Assuming you have models defin
 from pydantic import BaseModel
 
 # MinIO setup
-MINIO_ENDPOINT = "localhost:9100"
+MINIO_ENDPOINT = "minio:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 MINIO_BUCKET_NAME = "request-files"

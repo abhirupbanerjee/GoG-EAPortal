@@ -4,7 +4,7 @@ from botocore.client import Config
 from fastapi import UploadFile
 import uuid
 
-MINIO_ENDPOINT = "localhost:9100"
+MINIO_ENDPOINT = "minio:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 MINIO_BUCKET_NAME = "request-files"

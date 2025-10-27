@@ -12,6 +12,7 @@ volumes:
   traefik_logs:
 
 services:
+
   # ============================================
   # TRAEFIK - Reverse Proxy & SSL
   # ============================================
@@ -170,6 +171,26 @@ services:
       - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
       - "traefik.http.routers.minio-console.service=minio-console"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+
+
+
+  # ------------------------------------------------------------
+  # One-time file uploader (runs on same network as MinIO)
+  # ------------------------------------------------------------
+#  uploader:
+#    image: python:3.12-slim
+#    working_dir: /app
+#    volumes:
+#      - ./:/app                      # repo
+#      - ./DocumentsToUpload:/data    # host folder -> /data
+#    networks:
+#      - gog_network
+#    depends_on:
+#      - minio
+#    command: >
+#      sh -c "pip install --no-cache-dir -r requirements.txt &&
+#             python uploader.py"
+
 
   # ============================================
   # ELASTICSEARCH - Search Engine

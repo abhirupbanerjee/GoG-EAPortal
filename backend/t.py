@@ -10,13 +10,13 @@ from fastapi import FastAPI, Query
 app = FastAPI()
 
 # ✅ Elasticsearch Configuration
-ES_HOST = "http://localhost:9200"
+ES_HOST = "http://elasticsearch:9200"
 INDEX_NAME = "documents"
 
 es = Elasticsearch([ES_HOST])
 
 # ✅ MinIO Configuration
-MINIO_ENDPOINT = "localhost:9100"  # Use 9090 as per your setup
+MINIO_ENDPOINT = "minio:9000"  # Use 9090 as per your setup
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 BUCKET_NAME = "mybucket"

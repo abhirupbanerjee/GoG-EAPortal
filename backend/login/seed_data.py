@@ -1,17 +1,19 @@
 from minio import Minio
 from minio.error import S3Error
+from minio.commonconfig import Tags
+from typing import Dict
 import os
 
 # MinIO configuration
 minio_client = Minio(
-    "localhost:9090",
+    "minio:9000",
     access_key="minioadmin",
     secret_key="minioadmin",
     secure=False  # Set to True if using HTTPS
 )
 
 bucket_name = "mydocuments"
-folder_path = r"C:\Users\HJ161HA\OneDrive - EY\Desktop\GoG\code_v1\repo"  # Change this to your folder path
+folder_path = "/data/repo"  # Change this to your folder path
 
 # Create bucket if it doesn't exist
 if not minio_client.bucket_exists(bucket_name):
@@ -31,10 +33,6 @@ for filename in os.listdir(folder_path):
         except S3Error as e:
             print(f"Failed to upload {filename}: {e}")
 
-
-from minio import Minio
-from minio.commonconfig import Tags
-from typing import Dict
 
 def tag_minio_objects(
     endpoint: str,
@@ -85,7 +83,7 @@ if __name__ == "__main__":
     }
 
     tag_minio_objects(
-        endpoint="localhost:9090",
+        endpoint="minio:9000",
         access_key="minioadmin",
         secret_key="minioadmin",
         bucket_name="mydocuments",

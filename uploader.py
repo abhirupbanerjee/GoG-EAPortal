@@ -6,8 +6,8 @@ import os
 # MinIO connection
 minio_client = Minio(
     "minio:9000",  # IMPORTANT: Use container name inside Docker network
-    access_key="minioadmin",
-    secret_key="minioadmin",
+    access_key="minio",
+    secret_key="minio-admin",
     secure=False
 )
 # Define buckets to ensure exist

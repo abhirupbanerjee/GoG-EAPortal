@@ -36,7 +36,7 @@ app.add_middleware(
 # Fetch articles from Drupal Headless API
 @app.get("/articles")
 async def get_articles():
-    url = "http://localhost:8080/drupal_test/jsonapi/node/article"  # Fetch all articles
+    url = "http://drupal/jsonapi/node/article"  # Fetch all articles
     headers = {"Accept": "application/vnd.api+json"}
 
     response = requests.get(url, headers=headers)
@@ -69,7 +69,7 @@ async def get_articles():
 
 # MinIO Client
 minio_client = Minio(
-    "localhost:9100",  # ✅ Ensure this is the API port, NOT the console port (9090)
+    "minio:9000",  # ✅ Ensure this is the API port, NOT the console port (9090)
     access_key="minioadmin",  # ✅ Check if credentials match your MinIO setup
     secret_key="minioadmin",
     secure=False
@@ -78,7 +78,7 @@ minio_client = Minio(
 BUCKET_NAME = "mybucket"
 
 # Elasticsearch Client
-es = Elasticsearch("http://localhost:9200")
+es = Elasticsearch("http://elasticsearch:9200")
 
 
 # ✅ Metadata Extraction Functions (Integrated)

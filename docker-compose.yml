@@ -10,6 +10,14 @@ volumes:
   db_data:
   traefik_acme:
   traefik_logs:
+  wiki_db_data:
+  wiki_data:
+  paperless_db_data:
+  paperless_data:
+  paperless_media:
+  paperless_export:
+  paperless_redis:
+
 
 services:
 
@@ -231,11 +239,179 @@ services:
     networks:
       - gog_network
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${CONTACT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD}
+  # ============================================
+  # WIKI.JS - Knowledge Base
+  # ============================================
+  wiki_db:
+    image: postgres:15-alpine
+    container_name: wiki_db
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      POSTGRES_DB: ${WIKI_DB_NAME}
+      POSTGRES_USER: ${WIKI_DB_USER}
+      POSTGRES_PASSWORD: ${WIKI_DB_PASSWORD}
+    volumes:
+      - wiki_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WIKI_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  wiki:
+    image: requarks/wiki:2
+    container_name: wiki
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: wiki_db
+      DB_PORT: 5432
+      DB_USER: ${WIKI_DB_USER}
+      DB_PASS: ${WIKI_DB_PASSWORD}
+      DB_NAME: ${WIKI_DB_NAME}
+    depends_on:
+      wiki_db:
+        condition: service_healthy
+    volumes:
+      - wiki_data:/wiki/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pgadmin.rule=Host(`${DB_DOMAIN}`)"
-      - "traefik.http.routers.pgadmin.entrypoints=websecure"
-      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+      - "traefik.http.routers.wiki.rule=Host(`${WIKI_DOMAIN}`)"
+      - "traefik.http.routers.wiki.entrypoints=websecure"
+      - "traefik.http.routers.wiki.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wiki.loadbalancer.server.port=3000"
+
+  # ============================================
+  # PAPERLESS-NGX - Document Management
+  # ============================================
+  paperless_db:
+    image: postgres:15-alpine
+    container_name: paperless_db
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      POSTGRES_DB: ${PAPERLESS_DBNAME}
+      POSTGRES_USER: ${PAPERLESS_DBUSER}
+      POSTGRES_PASSWORD: ${PAPERLESS_DBPASS}
+    volumes:
+      - paperless_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAPERLESS_DBUSER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  paperless_redis:
+    image: redis:7-alpine
+    container_name: paperless_redis
+    restart: unless-stopped
+    networks:
+      - gog_network
+    volumes:
+      - paperless_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Apache Tika for advanced document parsing
+  tika:
+    image: apache/tika:latest
+    container_name: tika
+    restart: unless-stopped
+    networks:
+      - gog_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/tika"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Gotenberg for PDF conversion
+  gotenberg:
+    image: gotenberg/gotenberg:7
+    container_name: gotenberg
+    restart: unless-stopped
+    networks:
+      - gog_network
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: paperless
+    restart: unless-stopped
+    networks:
+      - gog_network
+    environment:
+      # Database
+      PAPERLESS_DBHOST: ${PAPERLESS_DBHOST}
+      PAPERLESS_DBNAME: ${PAPERLESS_DBNAME}
+      PAPERLESS_DBUSER: ${PAPERLESS_DBUSER}
+      PAPERLESS_DBPASS: ${PAPERLESS_DBPASS}
+      PAPERLESS_DBPORT: ${PAPERLESS_DBPORT}
+      
+      # Redis
+      PAPERLESS_REDIS: ${PAPERLESS_REDIS}
+      
+      # Application
+      PAPERLESS_URL: ${PAPERLESS_URL}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_TIME_ZONE: ${PAPERLESS_TIME_ZONE}
+      PAPERLESS_OCR_LANGUAGE: ${PAPERLESS_OCR_LANGUAGE}
+      
+      # Admin User
+      PAPERLESS_ADMIN_USER: ${PAPERLESS_ADMIN_USER}
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_ADMIN_MAIL: ${PAPERLESS_ADMIN_MAIL}
+      
+      # OCR & Processing
+      PAPERLESS_OCR_LANGUAGES: ${PAPERLESS_OCR_LANGUAGES}
+      PAPERLESS_CONSUMER_POLLING: ${PAPERLESS_CONSUMER_POLLING}
+      PAPERLESS_CONSUMER_RECURSIVE: ${PAPERLESS_CONSUMER_RECURSIVE}
+      PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS: ${PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS}
+      
+      # Tika & Gotenberg
+      PAPERLESS_TIKA_ENABLED: ${PAPERLESS_TIKA_ENABLED}
+      PAPERLESS_TIKA_ENDPOINT: ${PAPERLESS_TIKA_ENDPOINT}
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: ${PAPERLESS_TIKA_GOTENBERG_ENDPOINT}
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - paperless_export:/usr/src/paperless/export
+      # Optional: Mount a folder for document consumption
+      # - ./paperless-consume:/usr/src/paperless/consume
+    depends_on:
+      paperless_db:
+        condition: service_healthy
+      paperless_redis:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.paperless.rule=Host(`${DMS_DOMAIN}`)"
+      - "traefik.http.routers.paperless.entrypoints=websecure"
+      - "traefik.http.routers.paperless.tls.certresolver=letsencrypt"
+      - "traefik.http.services.paperless.loadbalancer.server.port=8000"

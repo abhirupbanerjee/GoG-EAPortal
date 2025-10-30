@@ -1,0 +1,27 @@
+frontend  | env: load .env
+frontend  | env: export NEXT_PUBLIC_APP_NAME
+frontend  | Networking has been disabled
+frontend  | Starting project at /app
+frontend  | Starting Metro Bundler
+frontend  | Skipping dependency validation in offline mode
+frontend  | Waiting on http://localhost:8081
+frontend  | Logs for your project will appear below.
+frontend  | Web Bundled 20110ms index.js (748 modules)
+frontend  | Web Bundled 53ms index.js (1 module)
+frontend  | Web Bundled 61ms index.js (1 module)
+frontend  | Web Bundled 65ms index.js (1 module)
+frontend  | npm error path /app
+frontend  | npm error command failed
+frontend  | npm error signal SIGTERM
+frontend  | npm error command sh -c expo start --offline
+frontend  | npm error A complete log of this run can be found in: /root/.npm/_logs/2025-10-29T19_06_21_996Z-debug-0.log
+frontend  | env: load .env
+frontend  | env: export NEXT_PUBLIC_APP_NAME
+frontend  | Networking has been disabled
+frontend  | Starting project at /app
+frontend  | Starting Metro Bundler
+frontend  | Skipping dependency validation in offline mode
+frontend  | Waiting on http://localhost:8081
+frontend  | Logs for your project will appear below.
+frontend  | Web Bundled 1581ms index.js (736 modules)
+frontend  | Web Bundled 68ms index.js (1 module)
